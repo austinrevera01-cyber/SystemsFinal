@@ -28,6 +28,8 @@ opts.Ts                 = get_option(opts, 'Ts', 0.001);
 opts.id_duration        = get_option(opts, 'id_duration', 3.5);
 opts.id_voltage         = get_option(opts, 'id_voltage', 1);
 opts.test_duration      = get_option(opts, 'test_duration', 3);
+opts.multi_sine_freqs   = get_option(opts, 'multi_sine_freqs', [0.5 1 2 5]);
+opts.multi_sine_amp     = get_option(opts, 'multi_sine_amp', 1);
 
 params = default_parameters();
 if isfield(opts, 'params')
@@ -61,20 +63,46 @@ step(const_voltage_to_yaw_model,opts.id_duration);
 grid on; xlabel('Time [s]'); ylabel('Yaw Rate [Rad/s]');
 legend('show'); title('Yaw Rate Comparison');
 
+% Bode verification with multiple sinusoidal inputs
+multi_sine_time = (0:opts.Ts:opts.test_duration)';
+multi_sine_input = zeros(numel(multi_sine_time), 1);
+for f = opts.multi_sine_freqs
+    multi_sine_input = multi_sine_input + opts.multi_sine_amp * sin(2*pi*f*multi_sine_time);
+end
+multi_sine_data = collect_pcode_response(multi_sine_input, multi_sine_time, opts, params, SS_values, const_voltage_to_yaw_model);
+multi_sine_tf = lsim(const_voltage_to_yaw_model, multi_sine_input, multi_sine_time);
 
-%Run pcode with varriable V
+figure('Name', 'Multi-Sine Frequency Verification');
+subplot(3,1,1);
+plot(multi_sine_time, multi_sine_input, 'k', 'DisplayName', 'Input Voltage');
+grid on; ylabel('Volts [V]'); legend('show'); title('Composite Sine Excitation');
+
+subplot(3,1,2);
+plot(multi_sine_time, multi_sine_data.yaw_rate, 'r', 'DisplayName', 'P-code'); hold on;
+plot(multi_sine_time, multi_sine_tf, 'b', 'DisplayName', 'Transfer Function');
+grid on; ylabel('Yaw Rate [rad/s]'); legend('show'); title('Yaw Response to Multi-Sine Input');
+
+subplot(3,1,3);
+measured_amp = arrayfun(@(f) steady_state_amplitude(multi_sine_data.yaw_rate, multi_sine_time, f), opts.multi_sine_freqs);
+predicted_amp = arrayfun(@(f) steady_state_amplitude(multi_sine_tf, multi_sine_time, f), opts.multi_sine_freqs);
+stem(opts.multi_sine_freqs, measured_amp, 'filled', 'DisplayName', 'Measured'); hold on;
+stem(opts.multi_sine_freqs, predicted_amp, 'LineStyle', '--', 'DisplayName', 'Transfer Function');
+grid on; xlabel('Frequency [Hz]'); ylabel('Amplitude [rad/s]');
+legend('show'); title('Frequency Response Amplitude Check');
+
+% Test the transfer function against a varying voltage profile
 clear collect_pcode_response;
-id_time = (0:opts.Ts:opts.test_duration)'; % Time vector for identification
-varr_volts = sin(5*id_time);
-varr_data = collect_pcode_response(varr_volts, id_time, opts, params,SS_values);
+id_time = (0:opts.Ts:opts.test_duration)';
+varr_volts = 0.8*sin(2*pi*0.5*id_time) + 0.4*sin(2*pi*2*id_time);
+varr_data = collect_pcode_response(varr_volts, id_time, opts, params, SS_values, const_voltage_to_yaw_model);
 
-figure('Name', 'Yaw Rate Comparison Varrible Input');
+figure('Name', 'Yaw Rate Comparison Variable Input');
 subplot(2,1,1)
 plot(id_time,varr_volts, 'b', 'DisplayName', 'Input Voltage');
-grid on; xlabel('Time [s]'); ylabel('Volts [V]');
+grid on; xlabel('Time [s]'); ylabel('Volts [V]'); title('Varying Voltage Profile');
 subplot(2,1,2)
 plot(id_time, varr_data.yaw_rate, 'r', 'DisplayName', 'P-code'); hold on;
-plot(id_time, varr_data.sim_yaw, 'b', 'DisplayName', 'Transfer Function')
+plot(id_time, varr_data.sim_yaw, 'b', 'DisplayName', 'Transfer Function');
 grid on; xlabel('Time [s]'); ylabel('Yaw Rate [Rad/s]');
 legend('show'); title('Yaw Rate Comparison');
 
@@ -84,6 +112,19 @@ end
 %%%%%%%%%%%%%%%%%%%
 %%% Local Functions
 %%%%%%%%%%%%%%%%%%%
+
+function amp = steady_state_amplitude(signal, time_vector, freq_hz)
+    % Estimate steady-state amplitude of a sinusoidal component by focusing on
+    % the latter half of the record, fitting to a sine at freq_hz, and
+    % returning the peak magnitude.
+    tail_start = ceil(numel(signal) / 2);
+    t_tail = time_vector(tail_start:end);
+    y_tail = signal(tail_start:end);
+
+    basis = [sin(2*pi*freq_hz*t_tail), cos(2*pi*freq_hz*t_tail)];
+    coeffs = basis \ y_tail;
+    amp = sqrt(sum(coeffs.^2));
+end
 
 function merged = merge_structs(base, override)
     merged = base;

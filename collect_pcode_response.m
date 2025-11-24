@@ -1,15 +1,27 @@
-function data = collect_pcode_response(voltage, time, opts, params,SS_values)
+function data = collect_pcode_response(voltage, time, opts, params, SS_values, yaw_model)
+    %COLLECT_PCODE_RESPONSE Compare P-code yaw with transfer function yaw.
+    %   data = collect_pcode_response(voltage, time, opts, params, SS_values, yaw_model)
+    %   gathers encoder/gyro data from the P-code model while also computing
+    %   the simulated yaw-rate response from the provided transfer function
+    %   model (yaw_model). If yaw_model is omitted, it is rebuilt from the
+    %   steering identification parameters contained in SS_values.
+
     steps = numel(time);
     data.time     = time(:);
     data.voltage  = voltage(:);
     data.yaw_rate = zeros(steps,1);
     data.motor_angle_counts = zeros(steps,1);
     data.sim_yaw = zeros(steps,1);
-    voltage_holder = zeros(steps,1);
     
     acc_counts   = 0;          
     last_raw     = NaN;         
     theta_counts = zeros(steps, 1);
+    if nargin < 6 || isempty(yaw_model)
+        const_rack_model = steering(params, SS_values);
+        yaw_tf = build_bicycle_model(params, opts.Vel);
+        yaw_model = series(const_rack_model, yaw_tf);
+    end
+
     [~, ~, ~] = run_Indy_car_Fall_25(0,0,[0 0 0 0 0],0);
     data.sim_yaw(1) = 0;
 
@@ -31,26 +43,6 @@ function data = collect_pcode_response(voltage, time, opts, params,SS_values)
         end
         last_raw = counts;
         theta_counts(k) = acc_counts;
-        if voltage(k) == 0
-            data.sim_yaw(k+1) = data.sim_yaw(k);
-            continue; % Skip the rest of the loop iteration if voltage is zero
-        end
-        coefficients.Be = params.gear.N * params.vehicle.Kt / (abs(voltage(k)) * SS_values.Be_multiplier);
-        coefficients.Je = SS_values.Je / abs(voltage(k));
-        const_rack_model = steering(params, coefficients);
-        % Build the yaw-rate bicycle model and cascade with rack model
-        [yaw_tf] = build_bicycle_model(params, opts.Vel);
-        variable_yaw_model = series(const_rack_model, yaw_tf);
-        voltage_holder (:) = abs(voltage (k));
-        y = lsim(variable_yaw_model,voltage_holder, time);
-        
-        if k < opts.test_duration/opts.Ts
-            if voltage(k) < 0
-                data.sim_yaw(k+1) = data.sim_yaw(k) -k * y(10);
-            else
-                data.sim_yaw(k+1) = data.sim_yaw(k) +k * y(10);
-            end
-        end
     end
 
    %motor counts
@@ -58,4 +50,7 @@ function data = collect_pcode_response(voltage, time, opts, params,SS_values)
    %motor to steering
    steering_degree = (theta_m / params.gear.N);
    data.motor_angle = steering_degree;
+
+   % Transfer function response to the same voltage profile
+   data.sim_yaw = lsim(yaw_model, voltage(:), time(:));
 end
