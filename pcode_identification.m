@@ -37,26 +37,31 @@ function SS_values = pcode_identification(voltage, time, opts, params)
     SS_values.tau = idx(1) * opts.Ts;
     SS_values.Be= params.gear.N*params.vehicle.Kt/SS_values.Be_multiplier;
     SS_values.Je = SS_values.tau*SS_values.Be;
+    SS_values.K = max(derivative) *SS_values.Je/SS_values.Be;
 
 
     % Plot the steering degree over time
     s = tf('s');
     figure('Name', 'System Identification');
     subplot(2,1,1)
-    plot(time, steering_degree);hold on;
+    plot(time, steering_degree, 'DisplayName', 'P-code');hold on;
     grid on;hold on;
-    step((params.gear.N*params.vehicle.Kt)/(SS_values.Je*s^2 + SS_values.Be*s), time);
+    [y,t] = step((params.gear.N*params.vehicle.Kt)/(SS_values.Je*s^2 + SS_values.Be*s), time);
+    plot(t,y, 'r', 'DisplayName', 'Simulated');
     xlabel('Time (s)');
     ylabel('Steering Degree (rads)');
     title('Steering Degree vs Time');
+    legend('show')
     % Calculate the derivative of the steering degree
     
     % Plot the derivative of the steering degree over time
     subplot(2,1,2)
-    plot(time, derivative);
+    plot(time, derivative,'DisplayName', 'P-code');
     grid on; hold on
-    step((params.gear.N*params.vehicle.Kt)/(SS_values.Je*s + SS_values.Be), time);
+    [y,t] = step((params.gear.N*params.vehicle.Kt)/(SS_values.Je*s + SS_values.Be), time);
+    plot(t,y, 'r', 'DisplayName', 'Simulated');
     xlabel('Time (s)');
     ylabel('Rate of Change of Steering Degree (rads/s)');
     title('Rate of Change of Steering Degree vs Time');
+    legend('show')
 end

@@ -1,10 +1,4 @@
 function data = collect_pcode_response(voltage, time, opts, params, SS_values, yaw_model)
-    %COLLECT_PCODE_RESPONSE Compare P-code yaw with transfer function yaw.
-    %   data = collect_pcode_response(voltage, time, opts, params, SS_values, yaw_model)
-    %   gathers encoder/gyro data from the P-code model while also computing
-    %   the simulated yaw-rate response from the provided transfer function
-    %   model (yaw_model). If yaw_model is omitted, it is rebuilt from the
-    %   steering identification parameters contained in SS_values.
 
     steps = numel(time);
     data.time     = time(:);

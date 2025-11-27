@@ -27,9 +27,10 @@ opts.Vel                = get_option(opts, 'Vel', 8);
 opts.Ts                 = get_option(opts, 'Ts', 0.001);
 opts.id_duration        = get_option(opts, 'id_duration', 3.5);
 opts.id_voltage         = get_option(opts, 'id_voltage', 1);
-opts.test_duration      = get_option(opts, 'test_duration', 3);
+opts.test_duration      = get_option(opts, 'test_duration', 50);
 opts.multi_sine_freqs   = get_option(opts, 'multi_sine_freqs', [0.5 1 2 5]);
 opts.multi_sine_amp     = get_option(opts, 'multi_sine_amp', 1);
+opts.controller_vel     = get_option(opts, 'controller_vel', 15);
 
 params = default_parameters();
 if isfield(opts, 'params')
@@ -57,7 +58,7 @@ plot(p, 0 , 'X', 'MarkerSize',10, 'LineWidth',3);
 xlabel('Real'); ylabel('Imag');
 title('Poles / Eigenvalues'); grid on;
 
-figure('Name', 'Yaw Rate Comparison Vonstant Input');
+figure('Name', 'Yaw Rate Comparison Constant Input');
 plot(id_time, SS_values.yaw_rate, 'r', 'DisplayName', 'Yaw Rate'); hold on;
 step(const_voltage_to_yaw_model,opts.id_duration);
 grid on; xlabel('Time [s]'); ylabel('Yaw Rate [Rad/s]');
@@ -106,6 +107,9 @@ plot(id_time, varr_data.sim_yaw, 'b', 'DisplayName', 'Transfer Function');
 grid on; xlabel('Time [s]'); ylabel('Yaw Rate [Rad/s]');
 legend('show'); title('Yaw Rate Comparison');
 
+
+controls = controller_dev(params,opts.controller_vel,SS_values);
+display(controls)
 end
 
 
