@@ -27,10 +27,10 @@ opts.Vel                = get_option(opts, 'Vel', 8);
 opts.Ts                 = get_option(opts, 'Ts', 0.001);
 opts.id_duration        = get_option(opts, 'id_duration', 3.5);
 opts.id_voltage         = get_option(opts, 'id_voltage', 1);
-opts.test_duration      = get_option(opts, 'test_duration', 50);
+opts.test_duration      = get_option(opts, 'test_duration', 3);
 opts.multi_sine_freqs   = get_option(opts, 'multi_sine_freqs', [0.5 1 2 5]);
 opts.multi_sine_amp     = get_option(opts, 'multi_sine_amp', 1);
-opts.controller_vel     = get_option(opts, 'controller_vel', 15);
+opts.controller_vel     = get_option(opts, 'controller_vel', 25);
 
 params = default_parameters();
 if isfield(opts, 'params')
@@ -109,7 +109,6 @@ legend('show'); title('Yaw Rate Comparison');
 
 
 controls = controller_dev(params,opts.controller_vel,SS_values);
-display(controls)
 end
 
 
