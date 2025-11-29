@@ -114,6 +114,24 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
 
     controller.TF = controller.loops.psi.tf;
 
+    %% Low-frequency tracking evaluation (psi_ref = sin(1*t))
+    sine_eval.freq_rad_s = 1;                 % rad/s command frequency
+    sine_eval.amp_rad    = deg2rad(5);        % reasonable 5 deg heading request
+    sine_eval.time       = (0:0.01:25)';      % long enough for steady-state
+    sine_eval.psi_ref    = sine_eval.amp_rad * sin(sine_eval.freq_rad_s * sine_eval.time);
+    [sine_eval.psi_resp, sine_eval.time] = lsim(T_psi, sine_eval.psi_ref, sine_eval.time);
+
+    [ref_amp, ref_phase]   = fit_sine(sine_eval.psi_ref, sine_eval.time, sine_eval.freq_rad_s);
+    [resp_amp, resp_phase] = fit_sine(sine_eval.psi_resp, sine_eval.time, sine_eval.freq_rad_s);
+    sine_eval.amp_ratio    = resp_amp / ref_amp;
+    sine_eval.phase_lag_deg = wrap_to_180(rad2deg(resp_phase - ref_phase));
+
+    [bode_mag, bode_phase, ~] = bode(T_psi, sine_eval.freq_rad_s);
+    sine_eval.bode_mag        = squeeze(bode_mag);
+    sine_eval.bode_phase_deg  = squeeze(bode_phase);
+
+    controller.sine_eval = sine_eval;
+
     if plot_opts.show_plots
         prefix = plot_opts.figure_prefix;
         quick_step_plot(T_delta, [prefix 'Inner steering: \delta_{ref} -> \delta']);
@@ -127,6 +145,16 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
         figure('Name', [prefix 'Heading loop Bode']);
         bode(T_psi);
         grid on;
+
+        figure('Name', [prefix 'Heading sinusoid tracking']);
+        plot(sine_eval.time, sine_eval.psi_ref, 'k--', 'DisplayName', '\psi_{ref} (5 deg)'); hold on;
+        plot(sine_eval.time, sine_eval.psi_resp, 'b', 'DisplayName', '\psi response');
+        grid on; xlabel('Time [s]'); ylabel('Heading [rad]');
+        title([prefix 'Tracking of \psi_{ref} = 5 deg \times sin(1t)']);
+        legend('show');
+        text(0.05*max(sine_eval.time), 0.8*max(sine_eval.amp_rad), ...
+            sprintf('Amp ratio: %.3f, Phase lag: %.1f deg', ...
+            sine_eval.amp_ratio, sine_eval.phase_lag_deg));
     end
 end
 
@@ -144,4 +172,23 @@ function pole_plot(poles, title_str)
     figure('Name', title_str);
     plot(real(poles), imag(poles), 'x', 'MarkerSize', 10, 'LineWidth', 2);
     xlabel('Real'); ylabel('Imag'); grid on; title(title_str);
+end
+
+function [amp, phase] = fit_sine(signal, time_vector, freq_rad_s)
+    % Estimate amplitude and phase of a sinusoid at freq_rad_s using the
+    % tail of the record to ignore transients.
+    tail_start = ceil(numel(signal) / 2);
+    t_tail = time_vector(tail_start:end);
+    y_tail = signal(tail_start:end);
+
+    basis = [sin(freq_rad_s * t_tail), cos(freq_rad_s * t_tail)];
+    coeffs = basis \ y_tail;
+
+    amp = sqrt(sum(coeffs.^2));
+    phase = atan2(coeffs(2), coeffs(1));
+end
+
+function deg_wrapped = wrap_to_180(degrees)
+    % Wrap angles to the [-180, 180] deg range for reporting phase lags.
+    deg_wrapped = mod(degrees + 180, 360) - 180;
 end

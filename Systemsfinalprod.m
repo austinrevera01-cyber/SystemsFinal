@@ -37,7 +37,7 @@ opts.id_voltage         = get_option(opts, 'id_voltage', 1);
 opts.test_duration      = get_option(opts, 'test_duration', 3);
 opts.multi_sine_freqs   = get_option(opts, 'multi_sine_freqs', [0.5 1 2 5]);
 opts.multi_sine_amp     = get_option(opts, 'multi_sine_amp', 1);
-opts.controller_vel     = get_option(opts, 'controller_vel', 25);
+opts.controller_vel     = get_option(opts, 'controller_vel', 15);
 opts.show_partB_plots   = get_option(opts, 'show_partB_plots', true);
 opts.figure_prefix      = get_option(opts, 'figure_prefix', 'Part B - ');
 
