@@ -40,6 +40,13 @@ opts.multi_sine_amp     = get_option(opts, 'multi_sine_amp', 1);
 opts.controller_vel     = get_option(opts, 'controller_vel', 15);
 opts.show_partB_plots   = get_option(opts, 'show_partB_plots', true);
 opts.figure_prefix      = get_option(opts, 'figure_prefix', 'Part B - ');
+opts.partC_duration     = get_option(opts, 'partC_duration', 20);
+opts.partC_waypoint     = get_option(opts, 'partC_waypoint', 1);
+opts.voltage_limit      = get_option(opts, 'voltage_limit', 12);
+opts.steering_limit_deg = get_option(opts, 'steering_limit_deg', 20);
+opts.step_speeds        = get_option(opts, 'step_speeds', [8 60]);
+opts.step_time          = get_option(opts, 'step_time', 0.1);
+opts.step_deg           = get_option(opts, 'step_deg', 5);
 
 params = default_parameters();
 if isfield(opts, 'params')
@@ -134,6 +141,28 @@ plot_config.figure_prefix = opts.figure_prefix;
 
 controls = controller_dev(params, opts.controller_vel, SS_values, plot_config);
 results.controller = controls;
+
+%% Part C: waypoint tracking with cascaded controller
+partC_opts = struct('Ts', opts.Ts, ...
+                    'sim_duration', opts.partC_duration, ...
+                    'Vel', opts.controller_vel, ...
+                    'waypoint_file', opts.partC_waypoint, ...
+                    'voltage_limit', opts.voltage_limit, ...
+                    'steering_limit_deg', opts.steering_limit_deg);
+
+results.partC = solve_part_c(controls, params, partC_opts);
+
+%% Part C validation: heading step response on the p-code plant
+step_opts = struct('Ts', opts.Ts, ...
+                  'sim_duration', 3, ...
+                  'step_time', opts.step_time, ...
+                  'step_deg', opts.step_deg, ...
+                  'speeds', opts.step_speeds, ...
+                  'voltage_limit', opts.voltage_limit, ...
+                  'steering_limit_deg', opts.steering_limit_deg, ...
+                  'yaw_tf', const_voltage_to_yaw_model);
+
+results.step_response = part_c_step_response(controls, params, step_opts);
 
 end
 
