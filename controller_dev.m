@@ -43,7 +43,7 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
 
     % Desired dynamics
     zeta = 0.7;   % damping ratio
-    TTS  = 0.6;   % target time-to-settle [s]
+    TTS  = 0.5;   % target time-to-settle [s]
 
     % Bicycle model shorthand
     C0 = Cf + Cr;
@@ -56,21 +56,19 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     D = ((C0*C2 - C1*m*velocity^2) - C1^2)/(Iz*m*velocity^2);
 
     % Inner steering loop (PI)
-    omega_n_delta = 4 / (zeta*TTS/6);
+    omega_n_delta = 4 / (zeta*TTS);
     controller.Kp1 = (2*tau*omega_n_delta - 1) / K;
     controller.Ki1 = (tau*omega_n_delta^2) / K;
 
     % Yaw-rate loop (PD)
-    omega_n_r = 4 / (zeta*(TTS/3));
-    controller.Kp2 = -((-A*C*(omega_n_r^2) + 2*A*D*omega_n_r*zeta - B*D + B*(omega_n_r^2)) ...
-                       / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2)) + 5;
-    controller.Kd2 = -((A*D - A*omega_n_r^2 - B*C + 2*B*omega_n_r*zeta) ...
-                       / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
+    omega_n_r = 4 / (zeta*(TTS));
+    controller.Kp2 = -((-A*C*(omega_n_r^2) + 2*A*D*omega_n_r*zeta - B*D + B*(omega_n_r^2))/ ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
+    controller.Kd2 = -((A*D - A*omega_n_r^2 - B*C + 2*B*omega_n_r*zeta) / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
 
     % Heading loop (PI)
     omega_n_psi = 4 / (zeta*TTS);
-    controller.Kp3 = omega_n_psi*2*zeta + 2;
-    controller.Ki3 = omega_n_psi^2;
+    controller.Kp3 = omega_n_psi*2*zeta;
+    controller.Ki3 = omega_n_psi^2
 
     s = tf('s');
 

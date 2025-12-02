@@ -45,7 +45,7 @@ opts.partC_waypoint     = get_option(opts, 'partC_waypoint', 1);
 opts.voltage_limit      = get_option(opts, 'voltage_limit', 12);
 opts.steering_limit_deg = get_option(opts, 'steering_limit_deg', 20);
 opts.step_speeds        = get_option(opts, 'step_speeds', [8 60]);
-opts.step_time          = get_option(opts, 'step_time', 0.1);
+opts.step_time          = get_option(opts, 'step_time', 0.001);
 opts.step_deg           = get_option(opts, 'step_deg', 5);
 
 params = default_parameters();

@@ -34,7 +34,7 @@ function step_results = part_c_step_response(controller, params, opts)
 
     Ts            = get_option(opts, 'Ts', 0.001);
     sim_duration  = get_option(opts, 'sim_duration', 3);
-    step_time     = get_option(opts, 'step_time', 0.1);
+    step_time     = get_option(opts, 'step_time', 0.001);
     step_deg      = get_option(opts, 'step_deg', 5);
     speeds        = get_option(opts, 'speeds', [8 60]);
     voltage_limit = get_option(opts, 'voltage_limit', 12);
@@ -43,8 +43,12 @@ function step_results = part_c_step_response(controller, params, opts)
     yaw_tf        = get_option(opts, 'yaw_tf', []);
     X0            = get_option(opts, 'X0', [0 0 0 0 0]);
 
-    if ~exist(out_dir, 'dir')
-        mkdir(out_dir);
+    out_dir_abs = out_dir;
+    if ~isfolder(out_dir_abs)
+        out_dir_abs = fullfile(pwd, out_dir);
+        if ~isfolder(out_dir_abs)
+            mkdir(out_dir_abs);
+        end
     end
 
     yaw_model = [];
@@ -59,9 +63,31 @@ function step_results = part_c_step_response(controller, params, opts)
                                   step_time, deg2rad(step_deg), voltage_limit, ...
                                   steer_lim_rad, X0, yaw_model);
 
-        fig_name = fullfile(out_dir, sprintf('heading_step_%dmps.png', Vtest));
-        save_heading_step_plot(result, fig_name);
-        result.figure = fig_name;
+        figure('Name', sprintf('Heading Step %.0f m/s', result.time(end) / result.time(2)));
+
+        subplot(3,1,1);
+        plot(result.time, result.heading_ref, 'k--', 'DisplayName', 'Reference'); hold on;
+        plot(result.time, result.heading, 'b', 'DisplayName', 'Measured');
+        if any(result.heading_linear)
+            plot(result.time, result.heading_linear, 'Color', [0.85 0.33 0.1], ...
+                 'DisplayName', 'Predicted');
+        end
+        grid on; ylabel('Heading [rad]');
+        title('Heading step response'); legend('Location','best');
+    
+        subplot(3,1,2);
+        plot(result.time, result.yaw_rate, 'b', 'DisplayName', 'Yaw rate'); hold on;
+        if any(result.yaw_rate_linear)
+            plot(result.time, result.yaw_rate_linear, 'Color', [0.85 0.33 0.1], ...
+                 'DisplayName', 'Predicted yaw rate');
+        end
+        grid on; ylabel('Yaw rate [rad/s]'); legend('Location','best');
+    
+        subplot(3,1,3);
+        plot(result.time, result.voltage, 'LineWidth', 1.2, 'DisplayName', 'Voltage'); hold on;
+        plot(result.time, result.steer_cmd, '--', 'DisplayName', 'Steer cmd [rad]');
+        plot(result.time, result.steering_angle, ':', 'DisplayName', 'Steer angle [rad]');
+        grid on; xlabel('Time [s]'); ylabel('Control'); legend('Location','best');
 
         step_results.(sprintf('speed_%d', Vtest)) = result;
     end
@@ -199,38 +225,6 @@ function metrics = compute_step_metrics(time, response, reference, step_time)
                      'settle_time', settle_time, ...
                      'overshoot_pct', overshoot_pct);
 end
-
-function save_heading_step_plot(result, fig_path)
-    fig = figure('Name', sprintf('Heading Step %.0f m/s', result.time(end) / result.time(2)));
-
-    subplot(3,1,1);
-    plot(result.time, result.heading_ref, 'k--', 'DisplayName', 'Reference'); hold on;
-    plot(result.time, result.heading, 'b', 'DisplayName', 'Measured');
-    if any(result.heading_linear)
-        plot(result.time, result.heading_linear, 'Color', [0.85 0.33 0.1], ...
-             'DisplayName', 'Predicted');
-    end
-    grid on; ylabel('Heading [rad]');
-    title('Heading step response'); legend('Location','best');
-
-    subplot(3,1,2);
-    plot(result.time, result.yaw_rate, 'b', 'DisplayName', 'Yaw rate'); hold on;
-    if any(result.yaw_rate_linear)
-        plot(result.time, result.yaw_rate_linear, 'Color', [0.85 0.33 0.1], ...
-             'DisplayName', 'Predicted yaw rate');
-    end
-    grid on; ylabel('Yaw rate [rad/s]'); legend('Location','best');
-
-    subplot(3,1,3);
-    plot(result.time, result.voltage, 'LineWidth', 1.2, 'DisplayName', 'Voltage'); hold on;
-    plot(result.time, result.steer_cmd, '--', 'DisplayName', 'Steer cmd [rad]');
-    plot(result.time, result.steering_angle, ':', 'DisplayName', 'Steer angle [rad]');
-    grid on; xlabel('Time [s]'); ylabel('Control'); legend('Location','best');
-
-    saveas(fig, fig_path);
-    close(fig);
-end
-
 function val = get_option(opts, name, default)
     if isfield(opts, name)
         val = opts.(name);
