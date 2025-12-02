@@ -60,29 +60,29 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     controller.Kp1 = (2*zeta*tau*omega_n_delta - 1) / K;
     controller.Ki1 = (tau*omega_n_delta^2) / K;
 
+    % Yaw-rate loop (PD)
+    omega_n_r = 4 / (zeta*(TTS));
+    controller.Kd2 = -((A*D - A*omega_n_r^2 - B*C + 2*B*omega_n_r*zeta) / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
+    % With lambda = 1 + A*Kd2 scaling the characteristic equation, solve
+    % Kp2 from (D + B*Kp2) = lambda*omega_n_r^2 to preserve the desired
+    % natural frequency after the derivative action changes the leading
+    % coefficient.
+    lambda_r = 1 + A*controller.Kd2;
+    controller.Kp2 = (lambda_r*(omega_n_r^2) - D) / B;
+
     s = tf('s');
 
     % Plants
     G_delta  = K/(tau*s + 1);              % V -> steering angle
     G_rdelta = (A*s + B)/(s^2 + C*s + D);  % steering -> yaw rate
 
-    % Steering controller and inner loop closure
+    % Controllers
     C_delta = controller.Kp1 + controller.Ki1/s;    % inner PI (δ-loop)
-    T_delta = feedback(C_delta*G_delta, 1);
-
-    % Yaw-rate loop (PI)
-    % Use the closed steering loop as the actuator and tune a PI controller
-    % to achieve the target natural frequency while providing zero steady-
-    % state error to constant yaw-rate commands.
-    omega_n_r = 4 / (zeta*(TTS));
-    G_r_actuated = G_rdelta * T_delta;
-    [C_r_pi, ~] = pidtune(G_r_actuated, 'PI', omega_n_r);
-    controller.Kp2 = C_r_pi.Kp;
-    controller.Ki2 = C_r_pi.Ki;
-    C_r     = controller.Kp2 + controller.Ki2/s;    % yaw-rate PI
+    C_r     = controller.Kp2 + controller.Kd2*s;    % yaw-rate PD
 
     %% Closed-loop interconnections
-    % 1) Inner steering loop: δ_ref -> δ (closed above for yaw tuning)
+    % 1) Inner steering loop: δ_ref -> δ
+    T_delta = feedback(C_delta*G_delta, 1);
 
     % 2) Yaw-rate loop: r_ref -> r (uses closed δ-loop as actuator)
     L_r = C_r * G_rdelta * T_delta;
