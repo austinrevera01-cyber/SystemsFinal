@@ -94,12 +94,26 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     % amplifying the steady-state response.
     omega_n_psi = 4 / (zeta*TTS);
     yaw_loop_dc_gain = dcgain(T_r);
-    controller.Kp3 = (omega_n_psi*2*zeta) / yaw_loop_dc_gain;
-    controller.Ki3 = (omega_n_psi^2) / yaw_loop_dc_gain;
-    C_psi   = controller.Kp3 + controller.Ki3/s;    % outer PI (heading)
+    Kp3_base = (omega_n_psi*2*zeta) / yaw_loop_dc_gain;
+    Ki3_base = (omega_n_psi^2) / yaw_loop_dc_gain;
+    C_psi_base   = Kp3_base + Ki3_base/s;    % outer PI (heading)
 
     % 3) Heading loop: ψ_ref -> ψ
     G_psi_eff = T_r / s;             % r_ref -> ψ is yaw-loop then integrator
+    L_psi_base = C_psi_base * G_psi_eff;
+    T_psi_base = feedback(L_psi_base, 1);
+
+    % Normalize heading-loop steady-state amplitude at the 1 rad/s command
+    % frequency to prevent the ~1.26 gain observed previously.
+    cmd_freq_rad_s = 1;
+    [bode_mag_cmd, ~, ~] = bode(T_psi_base, cmd_freq_rad_s);
+    heading_amp_ratio = squeeze(bode_mag_cmd);
+    heading_gain_scale = 1 / heading_amp_ratio;
+
+    controller.Kp3 = Kp3_base * heading_gain_scale;
+    controller.Ki3 = Ki3_base * heading_gain_scale;
+    C_psi   = controller.Kp3 + controller.Ki3/s;    % scaled outer PI (heading)
+
     L_psi = C_psi * G_psi_eff;
     T_psi = feedback(L_psi, 1);
 
@@ -122,7 +136,7 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     controller.TF = controller.loops.psi.tf;
 
     %% Low-frequency tracking evaluation (psi_ref = sin(1*t))
-    sine_eval.freq_rad_s = 1;                 % rad/s command frequency
+    sine_eval.freq_rad_s = cmd_freq_rad_s;    % rad/s command frequency
     sine_eval.amp_rad    = deg2rad(5);        % reasonable 5 deg heading request
     sine_eval.time       = (0:0.01:25)';      % long enough for steady-state
     sine_eval.psi_ref    = sine_eval.amp_rad * sin(sine_eval.freq_rad_s * sine_eval.time);
