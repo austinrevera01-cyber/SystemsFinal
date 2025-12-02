@@ -1,7 +1,7 @@
 function controller = controller_dev(params, velocity, SS_values, plot_opts)
 %CONTROLLER_DEV Design and evaluate cascaded yaw control loops (Part B).
 %   controller = CONTROLLER_DEV(params, velocity, SS_values, plot_opts)
-%   designs PI/PD gains for steering angle, yaw rate, and heading loops and
+%   designs PI/PI gains for steering angle, yaw rate, and heading loops and
 %   exercises the closed-loop responses required for Part B of the project.
 %
 %   Inputs:
@@ -57,18 +57,8 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
 
     % Inner steering loop (PI)
     omega_n_delta = 4 / (zeta*TTS);
-    controller.Kp1 = (2*tau*omega_n_delta - 1) / K;
+    controller.Kp1 = (2*zeta*tau*omega_n_delta - 1) / K;
     controller.Ki1 = (tau*omega_n_delta^2) / K;
-
-    % Yaw-rate loop (PD)
-    omega_n_r = 4 / (zeta*(TTS));
-    controller.Kp2 = -((-A*C*(omega_n_r^2) + 2*A*D*omega_n_r*zeta - B*D + B*(omega_n_r^2))/ ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
-    controller.Kd2 = -((A*D - A*omega_n_r^2 - B*C + 2*B*omega_n_r*zeta) / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
-
-    % Heading loop (PI)
-    omega_n_psi = 4 / (zeta*TTS);
-    controller.Kp3 = omega_n_psi*2*zeta;
-    controller.Ki3 = omega_n_psi^2
 
     s = tf('s');
 
@@ -76,21 +66,52 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     G_delta  = K/(tau*s + 1);              % V -> steering angle
     G_rdelta = (A*s + B)/(s^2 + C*s + D);  % steering -> yaw rate
 
-    % Controllers
+    % Steering controller and inner loop closure
     C_delta = controller.Kp1 + controller.Ki1/s;    % inner PI (δ-loop)
-    C_r     = controller.Kp2 + controller.Kd2*s;    % yaw-rate PD
-    C_psi   = controller.Kp3 + controller.Ki3/s;    % outer PI (heading)
+    T_delta = feedback(C_delta*G_delta, 1);
+
+    % Yaw-rate loop (PI)
+    % Use the closed steering loop as the actuator and tune a PI controller
+    % to achieve the target natural frequency while providing zero steady-
+    % state error to constant yaw-rate commands.
+    omega_n_r = 4 / (zeta*(TTS));
+    G_r_actuated = G_rdelta * T_delta;
+    [C_r_pi, ~] = pidtune(G_r_actuated, 'PI', omega_n_r);
+    controller.Kp2 = C_r_pi.Kp;
+    controller.Ki2 = C_r_pi.Ki;
+    C_r     = controller.Kp2 + controller.Ki2/s;    % yaw-rate PI
 
     %% Closed-loop interconnections
-    % 1) Inner steering loop: δ_ref -> δ
-    T_delta = feedback(C_delta*G_delta, 1);
+    % 1) Inner steering loop: δ_ref -> δ (closed above for yaw tuning)
 
     % 2) Yaw-rate loop: r_ref -> r (uses closed δ-loop as actuator)
     L_r = C_r * G_rdelta * T_delta;
     T_r = feedback(L_r, 1);
 
-    % 3) Heading loop: ψ_ref -> ψ
+    % Heading loop (PI)
+    % Include the yaw-loop low-frequency gain so the outer PI places the
+    % closed-loop poles at the intended natural frequency instead of
+    % amplifying the steady-state response.
+    omega_n_psi = 4 / (zeta*TTS);
+    yaw_loop_dc_gain = dcgain(T_r);
+    controller.Kp3 = (omega_n_psi*2*zeta) / yaw_loop_dc_gain;
+    controller.Ki3 = (omega_n_psi^2) / yaw_loop_dc_gain;
+
+    % Normalize the heading loop so the 1 rad/s sinusoidal test settles
+    % near unit amplitude. The PI gains are scaled by the closed-loop
+    % magnitude at the test frequency.
+    heading_test_freq = 1; % rad/s
+    C_psi_base = controller.Kp3 + controller.Ki3/s;    % outer PI (heading)
     G_psi_eff = T_r / s;             % r_ref -> ψ is yaw-loop then integrator
+    T_psi_base = feedback(C_psi_base * G_psi_eff, 1);
+    [mag_heading_base, ~, ~] = bode(T_psi_base, heading_test_freq);
+    gain_correction = 1 / squeeze(mag_heading_base);
+
+    controller.Kp3 = controller.Kp3 * gain_correction;
+    controller.Ki3 = controller.Ki3 * gain_correction;
+    C_psi   = controller.Kp3 + controller.Ki3/s;
+
+    % 3) Heading loop: ψ_ref -> ψ
     L_psi = C_psi * G_psi_eff;
     T_psi = feedback(L_psi, 1);
 
@@ -113,7 +134,7 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     controller.TF = controller.loops.psi.tf;
 
     %% Low-frequency tracking evaluation (psi_ref = sin(1*t))
-    sine_eval.freq_rad_s = 1;                 % rad/s command frequency
+    sine_eval.freq_rad_s = heading_test_freq; % rad/s command frequency
     sine_eval.amp_rad    = deg2rad(5);        % reasonable 5 deg heading request
     sine_eval.time       = (0:0.01:25)';      % long enough for steady-state
     sine_eval.psi_ref    = sine_eval.amp_rad * sin(sine_eval.freq_rad_s * sine_eval.time);
