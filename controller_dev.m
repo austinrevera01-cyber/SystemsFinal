@@ -57,18 +57,18 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
 
     % Inner steering loop (PI)
     omega_n_delta = 4 / (zeta*TTS);
-    controller.Kp1 = (2*tau*omega_n_delta - 1) / K;
+    controller.Kp1 = (2*zeta*tau*omega_n_delta - 1) / K;
     controller.Ki1 = (tau*omega_n_delta^2) / K;
 
     % Yaw-rate loop (PD)
     omega_n_r = 4 / (zeta*(TTS));
-    controller.Kp2 = -((-A*C*(omega_n_r^2) + 2*A*D*omega_n_r*zeta - B*D + B*(omega_n_r^2))/ ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
     controller.Kd2 = -((A*D - A*omega_n_r^2 - B*C + 2*B*omega_n_r*zeta) / ((A^2)*(omega_n_r^2) - 2*A*B*omega_n_r*zeta + B^2));
-
-    % Heading loop (PI)
-    omega_n_psi = 4 / (zeta*TTS);
-    controller.Kp3 = omega_n_psi*2*zeta;
-    controller.Ki3 = omega_n_psi^2
+    % With lambda = 1 + A*Kd2 scaling the characteristic equation, solve
+    % Kp2 from (D + B*Kp2) = lambda*omega_n_r^2 to preserve the desired
+    % natural frequency after the derivative action changes the leading
+    % coefficient.
+    lambda_r = 1 + A*controller.Kd2;
+    controller.Kp2 = (lambda_r*(omega_n_r^2) - D) / B;
 
     s = tf('s');
 
@@ -79,7 +79,6 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     % Controllers
     C_delta = controller.Kp1 + controller.Ki1/s;    % inner PI (δ-loop)
     C_r     = controller.Kp2 + controller.Kd2*s;    % yaw-rate PD
-    C_psi   = controller.Kp3 + controller.Ki3/s;    % outer PI (heading)
 
     %% Closed-loop interconnections
     % 1) Inner steering loop: δ_ref -> δ
@@ -88,6 +87,16 @@ function controller = controller_dev(params, velocity, SS_values, plot_opts)
     % 2) Yaw-rate loop: r_ref -> r (uses closed δ-loop as actuator)
     L_r = C_r * G_rdelta * T_delta;
     T_r = feedback(L_r, 1);
+
+    % Heading loop (PI)
+    % Include the yaw-loop low-frequency gain so the outer PI places the
+    % closed-loop poles at the intended natural frequency instead of
+    % amplifying the steady-state response.
+    omega_n_psi = 4 / (zeta*TTS);
+    yaw_loop_dc_gain = dcgain(T_r);
+    controller.Kp3 = (omega_n_psi*2*zeta) / yaw_loop_dc_gain;
+    controller.Ki3 = (omega_n_psi^2) / yaw_loop_dc_gain;
+    C_psi   = controller.Kp3 + controller.Ki3/s;    % outer PI (heading)
 
     % 3) Heading loop: ψ_ref -> ψ
     G_psi_eff = T_r / s;             % r_ref -> ψ is yaw-loop then integrator
