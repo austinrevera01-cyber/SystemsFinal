@@ -1,7 +1,7 @@
 function controller = controller_dev(params, velocity, SS_values, plot_opts)
 %CONTROLLER_DEV Design and evaluate cascaded yaw control loops (Part B).
 %   controller = CONTROLLER_DEV(params, velocity, SS_values, plot_opts)
-%   designs PI/PD gains for steering angle, yaw rate, and heading loops and
+%   designs PI/PI gains for steering angle, yaw rate, and heading loops and
 %   exercises the closed-loop responses required for Part B of the project.
 %
 %   Inputs:
